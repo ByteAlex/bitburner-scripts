@@ -149,7 +149,7 @@ export async function main(ns) {
     // Determine the set of desired augmentation stats. If not specified by the user, it's based on our situation
     desiredStatsFilters = options['stat-desired'];
     if ((desiredStatsFilters?.length ?? 0) == 0) // If the user does has not specified stats or augmentations to prioritize, buy up everything
-        desiredStatsFilters = ['*'] : // Money is not our concern, buy fast, reset fast => progress fast
+        desiredStatsFilters = ['*']; // Money is not our concern, buy fast, reset fast => progress fast
     log(ns, 'Desired stats filter: ' + JSON.stringify(desiredStatsFilters));
 
     // Prepare global data sets of faction and augmentation information
