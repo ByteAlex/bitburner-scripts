@@ -917,7 +917,7 @@ async function detectBestFactionWork(ns, factionName, combatThreshold = 75) {
 
         let priorizedRepGainRate = currentRepGainRate;
         
-        if (work === "field" || work === "security") {
+        if (work === ns.enums.FactionWorkType.field || work === ns.enums.FactionWorkType.security) {
             const { skills } = ns.getPlayer();
             if (skills.strength < combatThreshold || skills.defense < combatThreshold || skills.dexterity < combatThreshold || skills.agility < combatThreshold) {
                 priorizedRepGainRate *= 10;
