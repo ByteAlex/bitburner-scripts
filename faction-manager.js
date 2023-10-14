@@ -148,10 +148,8 @@ export async function main(ns) {
     desiredAugs = desiredAugs.filter(name => !simulatedOwnedAugmentations.includes(name));
     // Determine the set of desired augmentation stats. If not specified by the user, it's based on our situation
     desiredStatsFilters = options['stat-desired'];
-    if ((desiredStatsFilters?.length ?? 0) == 0) // If the user does has not specified stats or augmentations to prioritize, use sane defaults
-        desiredStatsFilters = ownedAugmentations.length > 40 ? ['*'] : // Once we have more than N augs, switch to buying up anything and everything
-            bitNode == 6 || bitNode == 7 || playerData.factions.includes("Bladeburners") ? ['*'] : // If doing bladeburners, combat augs matter too, so just get everything
-                ['hacking', 'faction_rep', 'company_rep', 'charisma', 'hacknet', 'crime_money']; // Otherwise get hacking + rep boosting, etc. for unlocking augs more quickly
+    if ((desiredStatsFilters?.length ?? 0) == 0) // If the user does has not specified stats or augmentations to prioritize, buy up everything
+        desiredStatsFilters = ['*'] : // Money is not our concern, buy fast, reset fast => progress fast
     log(ns, 'Desired stats filter: ' + JSON.stringify(desiredStatsFilters));
 
     // Prepare global data sets of faction and augmentation information
