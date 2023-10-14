@@ -802,6 +802,11 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
             const linearFunc = playerHackingLevel / hackingLevelRepCap;
             factionRepRequired = Math.min(factionRepRequired, 100_000 * linearFunc);
         }
+        // We don't have to force a reset, if we can just hang on for a slight little bit longer
+        // by giving a 20% overshoot threshold, we avoid resetting at 100k when we need 112.5k
+        if (originalFactionRepRequired < factionRepRequired * 1.2) {
+            factionRepRequired = originalFactionRepRequired;
+        }
     }
     
     if (currentReputation >= factionRepRequired)
