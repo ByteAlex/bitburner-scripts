@@ -791,6 +791,19 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     if (forceBestAug || highestRepAug <= 1.1 * Math.max(currentReputation, factionRepRequired))
         factionRepRequired = Math.max(highestRepAug, factionRepRequired);
     if (factionName == "Daedalus") await daedalusSpecialCheck(ns, favorRepRequired, currentReputation);
+
+    // Don't waste time trying to grind a faction to max-rep unnecessarily
+    // Instead, we focus on trying to get a bit of favor quickly across multiple factions
+    // This way, in our next reset, we'll have more hacking level + favor, making grinding rep even simpler
+    if (startingFavor <= startingFavorRepCap) {
+        if (playerHackingLevel > hackingLevelRepCap) {
+            factionRepRequired = Math.min(factionRepRequired, 100_000);
+        } else {
+            const linearFunc = playerHackingLevel / hackingLevelRepCap;
+            factionRepRequired = Math.min(factionRepRequired, 100_000 * linearFunc);
+        }
+    }
+    
     if (currentReputation >= factionRepRequired)
         return ns.print(`Faction "${factionName}" required rep of ${Math.round(factionRepRequired).toLocaleString('en')} has already been attained ` +
             `(Current rep: ${Math.round(currentReputation).toLocaleString('en')}). Skipping working for faction...`)
