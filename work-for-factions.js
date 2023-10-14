@@ -906,7 +906,7 @@ async function measureCompanyRepGainRate(ns, companyName) {
  * @param {NS} ns 
  * @param {string} factionName The name of the faction to work for
  * @returns {Promise<FactionWorkType>} The faction work type measured to give the best reputation gain rate */
-async function detectBestFactionWork(ns, factionName) {
+async function detectBestFactionWork(ns, factionName, combatThreshold = 75) {
     let bestWork, bestRepRate = 0;
     for (const work of Object.values(ns.enums.FactionWorkType)) {
         if (!(await startWorkForFaction(ns, factionName, work, shouldFocus))) {
@@ -915,9 +915,18 @@ async function detectBestFactionWork(ns, factionName) {
         }
         const currentRepGainRate = await measureFactionRepGainRate(ns, factionName);
 
+        let priorizedRepGainRate = currentRepGainRate;
+        
+        if (work === "field" || work === "security") {
+            const { skills } = ns.getPlayer();
+            if (skills.strength < combatThreshold || skills.defense < combatThreshold || skills.dexterity < combatThreshold || skills.agility < combatThreshold) {
+                priorizedRepGainRate *= 10;
+            }
+        }
+
         //ns.print(`"${factionName}" work ${work} provides ${formatNumberShort(currentRepGainRate)} rep rate`);
-        if (currentRepGainRate > bestRepRate) {
-            bestRepRate = currentRepGainRate;
+        if (priorizedRepGainRate > bestRepRate) {
+            bestRepRate = priorizedRepGainRate;
             bestWork = work;
         }
     }
