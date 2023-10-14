@@ -43,19 +43,20 @@ const cannotWorkForFactions = ["Church of the Machine God", "Bladeburners", "Sha
 // These factions should ideally be completed in this order
 const preferredEarlyFactionOrder = [
     "Netburners", // Improve hash income, which is useful or critical for almost all BNs
-    "Sector-12", // Acquire CashRoot Set for future resets
-    "Tian Di Hui", "Aevum", // These give all the company_rep and faction_rep bonuses early game
+    "Sector-12", "Aevum", // Acquire CashRoot Set for future resets
+    "Tian Di Hui", // These give all the company_rep and faction_rep bonuses early game
     "NiteSec", // Lots and lots of hacking bonuses
     "Daedalus", // Once we have all faction_rep boosting augs, there's no reason not to work towards Daedalus as soon as it's available/feasible so we can buy Red Pill
-    "CyberSec", /* Quick, and NightSec aug depends on an aug from here */, "Tetrads", // Cha augs to speed up earning company promotions
+    "CyberSec", /* Quick, and NightSec aug depends on an aug from here */,
+    "Chongqing", "New Tokyo", "Ishima", // Collect other cities augs
+    "The Black Hand",
+    "Volhaven", "Slum Snakes", "", // Collect combat stats
+    "Tetrads", "The Dark Army", // Require Combat Stats to rep quickly - Cha augs to speed up earning company promotions & leveling up tetrads should automatically cause high combat stats for DA
     "Bachman & Associates", // Boost company/faction rep for future augs
     "BitRunners", // Fast source of some unique hack augs
     "Fulcrum Secret Technologies", // Will be removed if hack level is too low to backdoor their server
     "ECorp", // More cmp_rep augs, and some strong hack ones as well
-    "The Black Hand", // Fastest sources of hacking augs after the above companies
-    "The Dark Army", // Unique cmp_rep aug TODO: Can it sensibly be gotten before megacorps? Requires 300 all combat stats.
     "Clarke Incorporated", "OmniTek Incorporated", "NWO", // More hack augs from companies
-    "Chongqing", // Unique Source of big 1.4x hack exp boost (Can only join if not in e.g. Aevum as well)
 ];
 // This is an approximate order of most useful augmentations left to offer, assuming all early-game factions have been cleaned out
 const preferredCompanyFactionOrder = [
