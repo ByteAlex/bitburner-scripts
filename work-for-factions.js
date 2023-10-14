@@ -44,9 +44,10 @@ const cannotWorkForFactions = ["Church of the Machine God", "Bladeburners", "Sha
 const preferredEarlyFactionOrder = [
     "Netburners", // Improve hash income, which is useful or critical for almost all BNs
     "Sector-12", // Acquire CashRoot Set for future resets
-    "Tian Di Hui", "Aevum", // These give all the company_rep and faction_rep bonuses early game    
+    "Tian Di Hui", "Aevum", // These give all the company_rep and faction_rep bonuses early game
+    "NiteSec", // Lots and lots of hacking bonuses
     "Daedalus", // Once we have all faction_rep boosting augs, there's no reason not to work towards Daedalus as soon as it's available/feasible so we can buy Red Pill
-    "CyberSec", /* Quick, and NightSec aug depends on an aug from here */ "NiteSec", "Tetrads", // Cha augs to speed up earning company promotions
+    "CyberSec", /* Quick, and NightSec aug depends on an aug from here */, "Tetrads", // Cha augs to speed up earning company promotions
     "Bachman & Associates", // Boost company/faction rep for future augs
     "BitRunners", // Fast source of some unique hack augs
     "Fulcrum Secret Technologies", // Will be removed if hack level is too low to backdoor their server
