@@ -209,7 +209,7 @@ async function tryToBuyBestServerPossible(ns) {
             [worstServerName, maxRamPossibleToBuy])) ? worstServerName : "";
     } else {
         purchasedServer = await getNsDataThroughFile(ns, `ns.purchaseServer(ns.args[0], ns.args[1])`, null,
-            [purchasedServerName, maxRamPossibleToBuy]);
+            [purchasedServerName + "-0"], maxRamPossibleToBuy]);
     }
     if (!purchasedServer)
         setStatus(ns, `${prefix}Could not ${isUpgrade ? 'upgrade' : 'purchase'} a server with ${formatRam(maxRamPossibleToBuy)} RAM for ${formatMoney(cost)} ` +
