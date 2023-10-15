@@ -1,7 +1,7 @@
 import {
     instanceCount, getConfiguration, getNsDataThroughFile, getFilePath, getActiveSourceFiles, tryGetBitNodeMultipliers,
     formatDuration, formatMoney, formatNumberShort, disableLogs, log
-} from './helpers.js'
+} from 'bitburner-scripts/helpers.js'
 
 let options;
 const argsSchema = [
@@ -11,6 +11,7 @@ const argsSchema = [
     ['desired-stats', []], // Factions will be removed from our 'early-faction-order' once all augs with these stats have been bought out
     ['no-focus', false], // Disable doing work that requires focusing (crime), and forces study/faction/company work to be non-focused (even if it means incurring a penalty)
     ['no-studying', false], // Disable studying.
+    ['no-field-work-for-combat-stats', false], // Disable field work to achieve combat stats
     ['pay-for-studies-threshold', 200000], // Only be willing to pay for our studies if we have this much money
     ['training-stat-per-multi-threshold', 100], // Heuristic: Estimate that we can train this many levels for every mult / exp_mult we have in a reasonable amount of time.
     ['no-coding-contracts', false], // Disable purchasing coding contracts for reputation
@@ -59,11 +60,12 @@ const preferredEarlyFactionOrder = [
     "CyberSec", /* Quick, and NightSec aug depends on an aug from here */,
     "Chongqing", "New Tokyo", "Ishima", // Collect other cities augs
     "The Black Hand",
-    "Volhaven", "Slum Snakes", "", // Collect combat stats
+    "Volhaven", "Slum Snakes", // Collect combat stats
     "BitRunners", // Fast source of some unique hack augs
-    "Tetrads", "The Syndicate", "The Dark Army", // Require Combat Stats to rep quickly - Cha augs to speed up earning company promotions & leveling up tetrads should automatically cause high combat stats for DA
+    "Tetrads", "The Syndicate", // Require Combat Stats to rep quickly - Cha augs to speed up earning company promotions & leveling up tetrads should automatically cause high combat stats for DA
     "Bachman & Associates", // Boost company/faction rep for future augs
     "Fulcrum Secret Technologies", // Will be removed if hack level is too low to backdoor their server
+    "The Dark Army", // only used for a str + dex aug, - useful to get combat stats for the 2 other end game factions
     "ECorp", // More cmp_rep augs, and some strong hack ones as well
     "Clarke Incorporated", "OmniTek Incorporated", "NWO", // More hack augs from companies
 ];
@@ -259,6 +261,10 @@ async function mainLoop(ns) {
         .filter(faction => !completedFactions.includes(faction))
         .find(faction => cityFactions.includes(faction));
     const citySkipFactions = cityFactionForThisRun ? enemyFactions[cityFactionForThisRun] : [];
+
+    const nextCombatFaction = preferredEarlyFactionOrder
+        .filter(faction => mostExpensiveAugByFaction[faction] > 0)
+        .find(faction => requiredCombatByFaction[faction] > 0 && !reqHackingOrCombat.includes(faction));
     // Immediately accept any outstanding faction invitations for factions we want to earn rep with soon
     // TODO: If check if we would qualify for an invite to any factions just by travelling, and do so to start earning passive rep
     const invites = await checkFactionInvites(ns);
@@ -308,8 +314,16 @@ async function mainLoop(ns) {
         !firstFactions.includes(f) && !skipFactions.includes(f) && !softCompletedFactions.includes(f)));
 
     // Grab all low-effort factions that we can for passive reputation farm
-    for (const faction of factionWorkOrder) {
+    const factionsRepNeeded = factionWorkOrder.filter(f => mostExpensiveAugByFaction[f] > 0);
+    for (const faction of factionsRepNeeded) {
+      if (breakToMainLoop()) break;
       await earnFactionInvite(ns, faction, true);
+    }
+
+    let requiredCombatStats = undefined;
+    if (nextCombatFaction && !options['no-field-work-for-combat-stats']) {
+      ns.print(`Next faction that requires combat stats is ${nextCombatFaction}, working towards it!`);
+      requiredCombatStats = requiredCombatByFaction[nextCombatFaction];
     }
 
     // Strategy 1: Tackle a consolidated list of desired faction order, interleaving simple factions and megacorporations
@@ -319,7 +333,7 @@ async function mainLoop(ns) {
         if (preferredCompanyFactionOrder.includes(faction)) // If this is a company faction, we need to work for the company first
             earnedNewFactionInvite = await workForMegacorpFactionInvite(ns, faction, true);
         // If new work was done for a company or their faction, restart the main work loop to see if we've since unlocked a higher-priority faction in the list
-        if (earnedNewFactionInvite || await workForSingleFaction(ns, faction)) {
+        if (earnedNewFactionInvite || await workForSingleFaction(ns, faction, false, false, undefined, requiredCombatStats)) {
             scope--; // De-increment scope so that effecitve scope doesn't increase on the next loop (i.e. it will be incremented back to what it is now)
             break;
         }
@@ -328,7 +342,7 @@ async function mainLoop(ns) {
 
     // Strategy 2: Grind XP with all priority factions that are joined or can be joined, until every single one has desired REP
     for (const faction of factionWorkOrder)
-        if (!breakToMainLoop()) await workForSingleFaction(ns, faction);
+        if (!breakToMainLoop()) await workForSingleFaction(ns, faction, false, false, undefined, requiredCombatStats);
     if (scope <= 2 || breakToMainLoop()) return;
 
     // Strategy 3: Work for any megacorporations not yet completed to earn their faction invites. Once joined, we don't lose these factions on reset.
@@ -399,6 +413,9 @@ const reqHackingOrCombat = ["Daedalus"]; // Special case factions that require o
 
 /** @param {NS} ns */
 async function earnFactionInvite(ns, factionName, lowEffort = false) {
+    if (lowEffort) {
+      ns.print(`Attempting to earn a cheap invite for ${factionName}!`);
+    }
     let player = await getPlayerInfo(ns);
     const joinedFactions = player.factions;
     if (joinedFactions.includes(factionName)) return true;
@@ -420,6 +437,7 @@ async function earnFactionInvite(ns, factionName, lowEffort = false) {
     let workedForInvite = false;
     // If committing crimes can help us join a faction - we know how to do that
     let doCrime = false;
+    let goToGym = false;
     if ((requirement = requiredKarmaByFaction[factionName]) && -ns.heart.break() < requirement) {
         ns.print(`${reasonPrefix} you have insufficient Karma. Need: ${-requirement}, Have: ${ns.heart.break()}`);
         doCrime = true;
@@ -459,13 +477,30 @@ async function earnFactionInvite(ns, factionName, lowEffort = false) {
                     `${formatNumberShort(player.mults[s])}*${formatNumberShort(player.mults[`${s}_exp`])}*` +
                     `${formatNumberShort(bitnodeMultipliers[`${title(s)}LevelMultiplier`])}*` +
                     `${formatNumberShort(bitnodeMultipliers.CrimeExpGain)})=${formatNumberShort(crimeHeuristic(s))}`).join(", "));
-        doCrime = lowEffort ? false : true; // TODO: There could be more efficient ways to gain combat stats than homicide, although at least this serves future crime factions
+        goToGym = lowEffort ? false : true;                    
         skippedWork = lowEffort ? true : false;
     }
+
     if (doCrime && options['no-crime'])
         return ns.print(`${reasonPrefix} Doing crime to meet faction requirements is disabled. (--no-crime or --no-focus)`);
     if (doCrime)
-        workedForInvite = await crimeForKillsKarmaStats(ns, requiredKillsByFaction[factionName] || 0, requiredKarmaByFaction[factionName] || 0, requiredCombatByFaction[factionName] || 0);
+        workedForInvite = await crimeForKillsKarmaStats(ns, requiredKillsByFaction[factionName] || 0, requiredKarmaByFaction[factionName] || 0, 0);
+
+    if (goToGym) {
+        const targetStat = requiredCombatByFaction[factionName];
+        const combatStats = ["strength", "defense", "dexterity", "agility"];
+        let allWorkedUp = true;
+        for (const stat of combatStats) {
+            if (breakToMainLoop()) return false;
+            if (player.skills[stat] < targetStat) {
+                await train(ns, shouldFocus, stat);
+                if (!await monitorStudies(ns, stat, targetStat)) {
+                  allWorkedUp = false;
+                }
+            }
+        }
+        workedForInvite = allWorkedUp;
+    }
 
     // Study for hack levels if that's what's keeping us
     // Note: Check if we have insuffient hack to backdoor this faction server. If we have sufficient hack, we will "waitForInvite" below assuming an external script is backdooring ASAP 
@@ -638,7 +673,38 @@ async function studyForCharisma(ns, focus) {
     return await study(ns, focus, 'Leadership', 'ZB Institute Of Technology');
 }
 
-const uniByCity = Object.fromEntries([["Aevum", "Summit University"], ["Sector-12", "Rothman University"], ["Volhaven", "ZB Institute of Technology"]]);
+const gymByCity = Object.fromEntries([
+    ["Sector-12", "Powerhouse Gym"], 
+    ["Aevum", "Snap Fitness Gym"], 
+    ["Volhaven", "Millenium Fitness Gym"]
+]);
+
+async function train(ns, focus, stat, gym = null, travel = true) {
+    const playerCity = (await getPlayerInfo(ns)).city;
+    if (!gym) { // Auto-detect the university in our city
+        gym = gymByCity[playerCity];
+        if (!gym) {
+            if (travel) {
+              await goToCity(ns, "Sector-12");
+              gym = gymByCity["Sector-12"];
+            } else {
+              log(ns, `WARNING: Could not go to gym because we are in city '${playerCity}' without a gym.`, false, 'warning');
+              return;
+            }
+        }
+    }
+    if(await getNsDataThroughFile(ns, 'ns.singularity.gymWorkout(ns.args[0], ns.args[1], ns.args[2])', null, [gym, stat, focus])) {
+      return true;
+    }
+    log(ns, `ERROR: For some reason, failed to train at the gym '${gym}' (Not in correct city? Player is in '${playerCity}')`, false, 'error');
+    return false;
+}
+
+const uniByCity = Object.fromEntries([
+    ["Aevum", "Summit University"], 
+    ["Sector-12", "Rothman University"], 
+    ["Volhaven", "ZB Institute of Technology"]
+]);
 
 /** @param {NS} ns */
 async function study(ns, focus, course, university = null) {
@@ -797,7 +863,7 @@ let lastFactionWorkStatus = "";
 /** @param {NS} ns 
  * Checks how much reputation we need with this faction to either buy all augmentations or get 150 favour, then works to that amount.
  * */
-export async function workForSingleFaction(ns, factionName, forceUnlockDonations = false, forceBestAug = false, forceRep = undefined) {
+export async function workForSingleFaction(ns, factionName, forceUnlockDonations = false, forceBestAug = false, forceRep = undefined, achieveCombatStats = undefined) {
     const repToFavour = (rep) => Math.ceil(25500 * 1.02 ** (rep - 1) - 25000);
     let highestRepAug = forceBestAug ? mostExpensiveAugByFaction[factionName] : mostExpensiveDesiredAugByFaction[factionName];
     let startingFavor = dictFactionFavors[factionName] || 0;
@@ -881,7 +947,7 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
             workAssigned = false; // This will force us to redetermine the best faction work.
         // Heads up! Current implementation of "detectBestFactionWork" changes the work currently being done, so we must always re-assign work afterwards 
         if (!workAssigned)
-            bestFactionJob = await detectBestFactionWork(ns, factionName);
+            bestFactionJob = await detectBestFactionWork(ns, factionName, achieveCombatStats ? achieveCombatStats : 0);
         // For purposes of being informative, log a message if the detected "bestFactionJob" is different from what we were previously doing
         if (currentWork.factionName == factionName && factionJob != bestFactionJob) {
             log(ns, `INFO: Detected that "${bestFactionJob}" gives more rep than previous work "${factionJob}". Switching...`);
