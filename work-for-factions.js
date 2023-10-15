@@ -60,9 +60,9 @@ const preferredEarlyFactionOrder = [
     "Chongqing", "New Tokyo", "Ishima", // Collect other cities augs
     "The Black Hand",
     "Volhaven", "Slum Snakes", "", // Collect combat stats
-    "Tetrads", "The Dark Army", // Require Combat Stats to rep quickly - Cha augs to speed up earning company promotions & leveling up tetrads should automatically cause high combat stats for DA
-    "Bachman & Associates", // Boost company/faction rep for future augs
     "BitRunners", // Fast source of some unique hack augs
+    "Tetrads", "The Syndicate", "The Dark Army", // Require Combat Stats to rep quickly - Cha augs to speed up earning company promotions & leveling up tetrads should automatically cause high combat stats for DA
+    "Bachman & Associates", // Boost company/faction rep for future augs
     "Fulcrum Secret Technologies", // Will be removed if hack level is too low to backdoor their server
     "ECorp", // More cmp_rep augs, and some strong hack ones as well
     "Clarke Incorporated", "OmniTek Incorporated", "NWO", // More hack augs from companies
