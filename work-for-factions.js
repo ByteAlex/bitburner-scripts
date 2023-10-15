@@ -60,7 +60,7 @@ const preferredEarlyFactionOrder = [
     "CyberSec", /* Quick, and NightSec aug depends on an aug from here */,
     "Chongqing", "New Tokyo", "Ishima", // Collect other cities augs
     "The Black Hand",
-    "Volhaven", "Slum Snakes", // Collect combat stats
+    "Volhaven", "Slum Snakes", "Speakers for the Dead", // Collect combat stats
     "BitRunners", // Fast source of some unique hack augs
     "Tetrads", "The Syndicate", // Require Combat Stats to rep quickly - Cha augs to speed up earning company promotions & leveling up tetrads should automatically cause high combat stats for DA
     "Bachman & Associates", // Boost company/faction rep for future augs
