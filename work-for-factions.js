@@ -304,9 +304,15 @@ async function mainLoop(ns) {
         ns.print(`Fulcrum faction server requires ${fulcrummHackReq} hack, so removing from our initial priority list for now.`);
     } // TODO: Otherwise, if we get Fulcrum, we have no need for a couple other company factions
 
-    // Strategy 1: Tackle a consolidated list of desired faction order, interleaving simple factions and megacorporations
     const factionWorkOrder = firstFactions.concat(priorityFactions.filter(f => // Remove factions from our initial "work order" if we've bought all desired augmentations.
         !firstFactions.includes(f) && !skipFactions.includes(f) && !softCompletedFactions.includes(f)));
+
+    // Grab all low-effort factions that we can for passive reputation farm
+    for (const faction of factionWorkOrder) {
+      await earnFactionInvite(ns, faction, true);
+    }
+
+    // Strategy 1: Tackle a consolidated list of desired faction order, interleaving simple factions and megacorporations
     for (const faction of factionWorkOrder) {
         if (breakToMainLoop()) break; // Only continue on to the next faction if it isn't time for a high-level update.
         let earnedNewFactionInvite = false;
@@ -392,7 +398,7 @@ const requiredKillsByFaction = { "Speakers for the Dead": 30, "The Dark Army": 5
 const reqHackingOrCombat = ["Daedalus"]; // Special case factions that require only hacking or combat stats, not both
 
 /** @param {NS} ns */
-async function earnFactionInvite(ns, factionName) {
+async function earnFactionInvite(ns, factionName, lowEffort = false) {
     let player = await getPlayerInfo(ns);
     const joinedFactions = player.factions;
     if (joinedFactions.includes(factionName)) return true;
@@ -408,6 +414,7 @@ async function earnFactionInvite(ns, factionName) {
             return ns.print(`${reasonPrefix} precluding faction "${precludingFaction}"" has been joined.`);
         }
     }
+    let skippedWork = false;
     let requirement;
     // See if we can take action to earn an invite for the next faction under consideration
     let workedForInvite = false;
@@ -452,7 +459,8 @@ async function earnFactionInvite(ns, factionName) {
                     `${formatNumberShort(player.mults[s])}*${formatNumberShort(player.mults[`${s}_exp`])}*` +
                     `${formatNumberShort(bitnodeMultipliers[`${title(s)}LevelMultiplier`])}*` +
                     `${formatNumberShort(bitnodeMultipliers.CrimeExpGain)})=${formatNumberShort(crimeHeuristic(s))}`).join(", "));
-        doCrime = true; // TODO: There could be more efficient ways to gain combat stats than homicide, although at least this serves future crime factions
+        doCrime = lowEffort ? false : true; // TODO: There could be more efficient ways to gain combat stats than homicide, although at least this serves future crime factions
+        skippedWork = lowEffort ? true : false;
     }
     if (doCrime && options['no-crime'])
         return ns.print(`${reasonPrefix} Doing crime to meet faction requirements is disabled. (--no-crime or --no-focus)`);
@@ -469,7 +477,10 @@ async function earnFactionInvite(ns, factionName) {
         }
     }
     requirement = Math.max(serverReqHackingLevel, requiredHackByFaction[factionName] || 0)
-    if (requirement && player.skills.hacking < requirement &&
+    if (!lowEffort && requirement && player.skills.hacking < requirement && !(reqHackingOrCombat.includes(factionName) && workedForInvite)) {
+        skippedWork = true;
+    }
+    if (!lowEffort && requirement && player.skills.hacking < requirement &&
         // Special case (Daedalus): Don't grind for hack requirement if we previously did a grind for the physical requirements
         !(reqHackingOrCombat.includes(factionName) && workedForInvite)) {
         ns.print(`${reasonPrefix} you have insufficient hack level. Need: ${requirement}, Have: ${player.skills.hacking}`);
@@ -514,19 +525,21 @@ async function earnFactionInvite(ns, factionName) {
     let travelledForInvite = false;
     let travelToCityOrDidRecently = async city => // Helper to consider us as having travelled for an invite if we did just now, or recently
         player.city != city && await goToCity(ns, city) || player.city == city && (Date.now() - lastTravel < 60000)
-    if (['Tian Di Hui', 'Tetrads', 'The Dark Army'].includes(factionName))
-        travelledForInvite = await travelToCityOrDidRecently('Chongqing');
-    else if (['The Syndicate'].includes(factionName))
-        travelledForInvite = await travelToCityOrDidRecently('Sector-12');
-    else if (cityFactions.includes(factionName))
-        travelledForInvite = await travelToCityOrDidRecently(factionName);
-    if (travelledForInvite) {
-        workedForInvite = true;
-        player = await getPlayerInfo(ns); // Update player.city
+    if (!skippedWork) {
+        if (['Tian Di Hui', 'Tetrads', 'The Dark Army'].includes(factionName))
+            travelledForInvite = await travelToCityOrDidRecently('Chongqing');
+        else if (['The Syndicate'].includes(factionName))
+            travelledForInvite = await travelToCityOrDidRecently('Sector-12');
+        else if (cityFactions.includes(factionName))
+            travelledForInvite = await travelToCityOrDidRecently(factionName);
+        if (travelledForInvite) {
+            workedForInvite = true;
+            player = await getPlayerInfo(ns); // Update player.city
+        }
     }
 
     // Special case, earn a CEO position to gain an invite to Silhouette
-    if ("Silhouette" == factionName) {
+    if (!lowEffort && "Silhouette" == factionName) {
         ns.print(`You must be a CO (e.g. CEO/CTO) of a company to earn an invite to ${factionName}. This may take a while!`);
         let factionConfig = companySpecificConfigs.find(f => f.name == factionName); // We set up Silhouette with a "company-specific-config" so that we can work for an invite like any megacorporation faction.
         let companyNames = preferredCompanyFactionOrder.map(f => companySpecificConfigs.find(cf => cf.name == f)?.companyName || f);
@@ -537,9 +550,12 @@ async function earnFactionInvite(ns, factionName) {
         // Hack: We will be working indefinitely, so we rely on an external script (daemon + faction-manager) to join this faction for us, or for checkForNewPrioritiesInterval to elapse.
         workedForInvite = await workForMegacorpFactionInvite(ns, factionName, false); // Work until CTO and the external script joins this faction, triggering an exit condition.
     }
+    if (lowEffort && factionName === "Silhouette") {
+        skippedWork = true;
+    }
 
     if (breakToMainLoop()) return false;
-    if (workedForInvite === true) // If we took some action to earn the faction invite, wait for it to come in
+    if (!skippedWork && workedForInvite === true) // If we took some action to earn the faction invite, wait for it to come in
         return await waitForFactionInvite(ns, factionName);
     else
         return ns.print(`Nothing we can do at this time to earn an invitation to faction "${factionName}"...`);
@@ -821,6 +837,7 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     // Instead, we focus on trying to get a bit of favor quickly across multiple factions
     // This way, in our next reset, we'll have more hacking level + favor, making grinding rep even simpler
     if (startingFavor <= startingFavorRepCap) {
+        const originalFactionRepRequired = factionRepRequired;
         const playerHackingLevel = ns.getHackingLevel();
         if (playerHackingLevel > hackingLevelRepCap) {
             factionRepRequired = Math.min(factionRepRequired, 100_000);
