@@ -788,6 +788,10 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     let favorRepRequired = Math.max(0, repToFavour(repToDonate) - repToFavour(startingFavor));
     // When to stop grinding faction rep (usually ~467,000 to get 150 favour) Set this lower if there are no augs requiring that much REP
     let factionRepRequired = forceRep ? forceRep : forceUnlockDonations ? favorRepRequired : Math.min(highestRepAug, favorRepRequired);
+    const cityFactionForThisRun = preferredEarlyFactionOrder
+        .filter(faction => !completedFactions.includes(faction))
+        .find(faction => cityFactions.includes(faction));
+    const citySkipFactions = cityFactionForThisRun ? enemyFactions[cityFactionForThisRun] : [];
     
     if (highestRepAug == -1 && !firstFactions.includes(factionName) && !forceRep && !options['get-invited-to-every-faction'])
         return ns.print(`All "${factionName}" augmentations are owned. Skipping unlocking faction...`);
