@@ -39,7 +39,16 @@ const jobs = [ // Job stat requirements for a company with a base stat modifier 
 const factions = ["Illuminati", "Daedalus", "The Covenant", "ECorp", "MegaCorp", "Bachman & Associates", "Blade Industries", "NWO", "Clarke Incorporated", "OmniTek Incorporated",
     "Four Sigma", "KuaiGong International", "Fulcrum Secret Technologies", "BitRunners", "The Black Hand", "NiteSec", "Aevum", "Chongqing", "Ishima", "New Tokyo", "Sector-12",
     "Volhaven", "Speakers for the Dead", "The Dark Army", "The Syndicate", "Silhouette", "Tetrads", "Slum Snakes", "Netburners", "Tian Di Hui", "CyberSec"];
-const cannotWorkForFactions = ["Church of the Machine God", "Bladeburners", "Shadows of Anarchy"]
+const cannotWorkForFactions = ["Church of the Machine God", "Bladeburners", "Shadows of Anarchy"];
+const cityFactions = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
+const enemyFactions = {
+    "Sector-12": ["Chongqing", "New Tokyo", "Ishima"],
+    "Aevum": ["Chongqing", "New Tokyo", "Ishima"],
+    "Volhaven": ["Sector-12", "Aevum", "Chongqing", "New Tokyo", "Ishima"],
+    "Chongqing": ["Sector-12", "Aevum", "Volhaven"],
+    "New Tokyo": ["Sector-12", "Aevum", "Volhaven"],
+    "Ishima": ["Sector-12", "Aevum", "Volhaven"],
+};
 // These factions should ideally be completed in this order
 const preferredEarlyFactionOrder = [
     "Netburners", // Improve hash income, which is useful or critical for almost all BNs
@@ -82,6 +91,9 @@ const loopSleepInterval = 5000; // 5 seconds
 const statusUpdateInterval = 60 * 1000; // 1 minute (outside of this, minor updates in e.g. stats aren't logged)
 const checkForNewPrioritiesInterval = 10 * 60 * 1000; // 10 minutes. Interrupt whatever we're doing and check whether we could be doing something more useful.
 const waitForFactionInviteTime = 30 * 1000; // The game will only issue one new invite every 25 seconds, so if you earned two by travelling to one city, might have to wait a while
+
+const startingFavorRepCap = 25;
+const hackingLevelRepCap = 1000;
 
 let shouldFocus; // Whether we should focus on work or let it be backgrounded (based on whether "Neuroreceptor Management Implant" is owned, or "--no-focus" is specified)
 // And a bunch of globals because managing state and encapsulation is hard.
@@ -216,7 +228,7 @@ async function loadStartupData(ns) {
     // Filter out factions who have no augs (or tentatively filter those with no desirable augs) unless otherwise configured. The exception is
     // we will always filter the most-precluding city factions, (but not ["Chongqing", "New Tokyo", "Ishima"], which can all be joined simultaneously)
     // TODO: Think this over more. need to filter e.g. chonquing if volhaven is incomplete...
-    const filterableFactions = (options['get-invited-to-every-faction'] ? ["Aevum", "Sector-12", "Volhaven"] : allKnownFactions);
+    const filterableFactions = (options['get-invited-to-every-faction'] ? cityFactions : allKnownFactions);
     // Unless otherwise configured, we will skip factions with no remaining augmentations
     completedFactions = filterableFactions.filter(fac => mostExpensiveAugByFaction[fac] == -1);
     softCompletedFactions = filterableFactions.filter(fac => mostExpensiveDesiredAugByFaction[fac] == -1 && !completedFactions.includes(fac));
@@ -243,12 +255,16 @@ async function mainLoop(ns) {
         scope = 1; // Back to basics until we've satisfied all highest-priority work
         numJoinedFactions = player.factions.length;
     }
+    const cityFactionForThisRun = preferredEarlyFactionOrder
+        .filter(faction => !completedFactions.includes(faction))
+        .find(faction => cityFactions.includes(faction));
+    const citySkipFactions = cityFactionForThisRun ? enemyFactions[cityFactionForThisRun] : [];
     // Immediately accept any outstanding faction invitations for factions we want to earn rep with soon
     // TODO: If check if we would qualify for an invite to any factions just by travelling, and do so to start earning passive rep
     const invites = await checkFactionInvites(ns);
     const invitesToAccept = options['get-invited-to-every-faction'] || options['prioritize-invites'] ?
-        invites.filter(f => !skipFactions.includes(f)) :
-        invites.filter(f => !skipFactions.includes(f) && !softCompletedFactions.includes(f));
+        invites.filter(f => !skipFactions.includes(f) && !citySkipFactions.includes(f)) :
+        invites.filter(f => !skipFactions.includes(f) && !softCompletedFactions.includes(f) && !citySkipFactions.includes(f));
     for (const invite of invitesToAccept)
         await tryJoinFaction(ns, invite);
     // Get some information about gangs (if unlocked)
@@ -386,11 +402,12 @@ async function earnFactionInvite(ns, factionName) {
 
     // Can't join certain factions for various reasons
     let reasonPrefix = `Cannot join faction "${factionName}" because`;
-    let precludingFaction;
-    if (["Aevum", "Sector-12"].includes(factionName) && (precludingFaction = ["Chongqing", "New Tokyo", "Ishima", "Volhaven"].find(f => joinedFactions.includes(f))) ||
-        ["Chongqing", "New Tokyo", "Ishima"].includes(factionName) && (precludingFaction = ["Aevum", "Sector-12", "Volhaven"].find(f => joinedFactions.includes(f))) ||
-        ["Volhaven"].includes(factionName) && (precludingFaction = ["Aevum", "Sector-12", "Chongqing", "New Tokyo", "Ishima"].find(f => joinedFactions.includes(f))))
-        return ns.print(`${reasonPrefix} precluding faction "${precludingFaction}"" has been joined.`);
+    if (cityFactions.includes(factionName)) {
+        let precludingFaction = enemyFactions[factionName].find(f => joinedFactions.includes(f));
+        if (precludingFaction) {
+            return ns.print(`${reasonPrefix} precluding faction "${precludingFaction}"" has been joined.`);
+        }
+    }
     let requirement;
     // See if we can take action to earn an invite for the next faction under consideration
     let workedForInvite = false;
@@ -501,7 +518,7 @@ async function earnFactionInvite(ns, factionName) {
         travelledForInvite = await travelToCityOrDidRecently('Chongqing');
     else if (['The Syndicate'].includes(factionName))
         travelledForInvite = await travelToCityOrDidRecently('Sector-12');
-    else if (["Aevum", "Chongqing", "Sector-12", "New Tokyo", "Ishima", "Volhaven"].includes(factionName))
+    else if (cityFactions.includes(factionName))
         travelledForInvite = await travelToCityOrDidRecently(factionName);
     if (travelledForInvite) {
         workedForInvite = true;
@@ -771,12 +788,11 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     let favorRepRequired = Math.max(0, repToFavour(repToDonate) - repToFavour(startingFavor));
     // When to stop grinding faction rep (usually ~467,000 to get 150 favour) Set this lower if there are no augs requiring that much REP
     let factionRepRequired = forceRep ? forceRep : forceUnlockDonations ? favorRepRequired : Math.min(highestRepAug, favorRepRequired);
-
-    const startingFavorRepCap = 25;
-    const hackingLevelRepCap = 1000;
     
     if (highestRepAug == -1 && !firstFactions.includes(factionName) && !forceRep && !options['get-invited-to-every-faction'])
         return ns.print(`All "${factionName}" augmentations are owned. Skipping unlocking faction...`);
+    if (citySkipFactions.includes(factionName))
+        return ns.print(`Skip earning faction invite for ${factionName} - We're planning to achieve ${cityFactionForThisRun}`);
     // Ensure we get an invite to location-based factions we might want / need
     if (!await earnFactionInvite(ns, factionName))
         return ns.print(`We are not yet part of faction "${factionName}". Skipping working for faction...`);
@@ -801,6 +817,7 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     // Instead, we focus on trying to get a bit of favor quickly across multiple factions
     // This way, in our next reset, we'll have more hacking level + favor, making grinding rep even simpler
     if (startingFavor <= startingFavorRepCap) {
+        const playerHackingLevel = ns.getHackingLevel();
         if (playerHackingLevel > hackingLevelRepCap) {
             factionRepRequired = Math.min(factionRepRequired, 100_000);
         } else {
